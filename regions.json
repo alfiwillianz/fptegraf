@@ -1,0 +1,15 @@
+{
+  "project": "Real-time Emotion Recognition GCN",
+  "total_selected_nodes": 68,
+  "normalization_anchor_index": 1,
+  "description": "Subsampled structural layout from MediaPipe 468/478 Face Mesh topology optimizing for highly expressive mobile-first inference environments.",
+  "landmark_subsets": {
+    "mouth_lips_outer": [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146],
+    "mouth_lips_inner": [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95],
+    "left_eye_contour": [33, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 246],
+    "right_eye_contour": [263, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 466],
+    "left_eyebrow": [70, 63, 105, 66, 107],
+    "right_eyebrow": [300, 293, 334, 296, 336],
+    "nose_bridge_and_center": [1, 2, 4, 5, 6, 168]
+  }
+}
