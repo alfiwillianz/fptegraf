@@ -67,6 +67,7 @@ def main():
         
         coords_list = []
         labels_list = []
+        image_paths_list = []
         
         # --- PHASE 1: PROCESS RAF-DB IMAGES ---
         csv_filename = os.path.join("DATASET", "raf-db", f"{split}_labels.csv")
@@ -89,12 +90,12 @@ def main():
                 if not os.path.exists(img_path):
                     raf_skipped += 1
                     continue
-
+ 
                 img = cv2.imread(img_path)
                 if img is None:
                     raf_skipped += 1
                     continue
-
+ 
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 results = face_mesh.process(img_rgb)
                 
@@ -107,12 +108,13 @@ def main():
                 
                 coords_list.append(torch.tensor(landmarks, dtype=torch.float32))
                 labels_list.append(mapped_label)
+                image_paths_list.append(img_path)
                 raf_success += 1
                 
             print(f"-> RAF-DB Ingest: {raf_success} processed, {raf_skipped} skipped/failed.")
         else:
             print(f"[Warning] {csv_filename} not found. Skipping RAF-DB pipeline block.")
-
+ 
         # --- PHASE 2: PROCESS AFFECTNET IMAGES ---
         an_paths, an_labels = an_splits[split]
         if len(an_paths) > 0:
@@ -122,12 +124,12 @@ def main():
                 if not os.path.exists(img_path):
                     an_skipped += 1
                     continue
-
+ 
                 img = cv2.imread(img_path)
                 if img is None:
                     an_skipped += 1
                     continue
-
+ 
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 results = face_mesh.process(img_rgb)
                 
@@ -140,18 +142,23 @@ def main():
                 
                 coords_list.append(torch.tensor(landmarks, dtype=torch.float32))
                 labels_list.append(mapped_label)
+                image_paths_list.append(img_path)
                 an_success += 1
             print(f"-> AffectNet Ingest: {an_success} processed, {an_skipped} skipped/failed.")
         else:
             print(f"No AffectNet images to process for {split} split.")
-
+ 
         # --- PHASE 3: CONSOLIDATE & EXPORT ---
         if len(coords_list) > 0:
             coords_tensor = torch.stack(coords_list)   # (Total_Samples, 468, 2)
             labels_tensor = torch.tensor(labels_list, dtype=torch.long) # (Total_Samples,)
             
             output_path = os.path.join("data", f"{split}_data.pt")
-            torch.save({"coords": coords_tensor, "labels": labels_tensor}, output_path)
+            torch.save({
+                "coords": coords_tensor,
+                "labels": labels_tensor,
+                "image_paths": image_paths_list
+            }, output_path)
             
             print(f"🎉 Successfully exported Combined {split.upper()} Data!")
             print(f"Total Tensors Shape: {coords_tensor.shape} | File Saved to: {output_path}")

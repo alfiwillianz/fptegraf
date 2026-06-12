@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometric Emotion Recognition Dashboard</title>
+    <meta name="description" content="Privacy-driven local edge and hybrid cloud GAT visualization dashboard for geometric facial emotion recognition.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe and ONNX CDN Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #080b11;
+            --panel-bg: rgba(17, 25, 40, 0.75);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --accent-edge: #10b981;
+            --accent-edge-glow: rgba(16, 185, 129, 0.4);
+            --accent-cloud: #f43f5e;
+            --accent-cloud-glow: rgba(244, 63, 94, 0.4);
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, var(--bg-color) 70%);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+            background: linear-gradient(to right, #60a5fa, #a78bfa, #f43f5e);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.025em;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 300;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 24px;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Glassmorphic Cards */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+        }
+
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            align-self: start;
+        }
+
+        h2, h3 {
+            margin: 0 0 16px 0;
+            font-weight: 600;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 8px;
+        }
+
+        h2 {
+            color: #60a5fa;
+        }
+
+        /* Mode Selector Radios */
+        .mode-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .mode-card {
+            position: relative;
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 14px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .mode-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .mode-card input[type="radio"] {
+            margin: 0;
+            accent-color: currentColor;
+            width: 18px;
+            height: 18px;
+        }
+
+        .mode-card.edge-mode-card {
+            color: var(--accent-edge);
+        }
+
+        .mode-card.cloud-mode-card {
+            color: var(--accent-cloud);
+        }
+
+        .mode-card.active.edge-mode-card {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--accent-edge);
+            box-shadow: 0 0 15px var(--accent-edge-glow);
+        }
+
+        .mode-card.active.cloud-mode-card {
+            background: rgba(244, 63, 94, 0.1);
+            border-color: var(--accent-cloud);
+            box-shadow: 0 0 15px var(--accent-cloud-glow);
+        }
+
+        .mode-info {
+            display: flex;
+            flex-direction: column;
+            color: var(--text-primary);
+        }
+
+        .mode-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .mode-desc {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Sliders */
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .slider-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .slider-header span.val {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #1e293b;
+            border-radius: 3px;
+            outline: none;
+            accent-color: #60a5fa;
+        }
+
+        /* Toggle Button styling */
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .checkbox-item input {
+            accent-color: #60a5fa;
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Console styling */
+        .console-panel {
+            background: rgba(5, 8, 15, 0.85);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 12px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: #38bdf8;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);
+        }
+
+        .console-line {
+            line-height: 1.4;
+        }
+
+        .console-line.info { color: #38bdf8; }
+        .console-line.success { color: #4ade80; }
+        .console-line.warn { color: #facc15; }
+        .console-line.error { color: #f87171; }
+
+        /* Center Display Area */
+        .display-area {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .stage-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        .display-stage {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            border-radius: 16px;
+            background: #020617;
+            overflow: hidden;
+            border: 2px solid var(--panel-border);
+        }
+
+        #webcam, #static-img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            object-fit: cover;
+            border-radius: 14px;
+        }
+
+        #webcam {
+            transform: scaleX(-1);
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Input Source Switcher */
+        .source-switcher {
+            display: flex;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            padding: 4px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            gap: 4px;
+        }
+
+        .source-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            font-family: var(--font-main);
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .source-btn.active {
+            background: #2563eb;
+            color: var(--text-primary);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .file-upload-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .custom-file-btn {
+            background: #1e293b;
+            border: 1px solid var(--panel-border);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .custom-file-btn:hover {
+            background: #334155;
+        }
+
+        /* Metrics HUD Overlay inside Stage */
+        .stage-hud {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .hud-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .hud-label {
+            color: var(--text-secondary);
+        }
+
+        .hud-val {
+            color: #38bdf8;
+            font-weight: 600;
+        }
+
+        /* Emotion Probabilities Chart Card */
+        .chart-card {
+            width: 100%;
+        }
+
+        .emotion-display {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            padding: 16px 20px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .emotion-display-label {
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .emotion-display-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent-edge);
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+        }
+
+        .prob-bar-container {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .prob-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .prob-label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .prob-label {
+            color: var(--text-primary);
+        }
+
+        .prob-val {
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .bar-bg {
+            background: #1e293b;
+            width: 100%;
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            width: 0%;
+            transition: width 0.2s cubic-bezier(0.1, 0.8, 0.3, 1), background-color 0.3s;
+        }
+
+        /* Custom Colors for Emotion Chart Bars */
+        .bar-0 { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.4); } /* Surprise: Blue */
+        .bar-1 { background: #8b5cf6; box-shadow: 0 0 8px rgba(139, 92, 246, 0.4); } /* Fear: Purple */
+        .bar-2 { background: #84cc16; box-shadow: 0 0 8px rgba(132, 204, 22, 0.4); } /* Disgust: Lime */
+        .bar-3 { background: #eab308; box-shadow: 0 0 8px rgba(234, 179, 8, 0.4); } /* Happiness: Yellow */
+        .bar-4 { background: #6b7280; box-shadow: 0 0 8px rgba(107, 114, 128, 0.4); } /* Sadness: Gray */
+        .bar-5 { background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }  /* Anger: Red */
+        .bar-6 { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }  /* Neutral: Green */
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Geometric Emotion Recognition</h1>
+        <p>Explainable Graph Attention Network (GAT) vs Privacy-Driven Edge Inference</p>
+    </header>
+
+    <main class="dashboard">
+        <!-- Control Panel (Column 1) -->
+        <section class="control-panel">
+            <!-- Visualization Controls -->
+            <div class="glass-panel">
+                <h2>1. GAT Visual Overlays</h2>
+                <div class="slider-group">
+                    <div class="slider-item">
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="toggle-nodes" checked> Show Graph Nodes
+                        </label>
+                    </div>
+
+                    <div class="slider-item">
+                        <div class="slider-header">
+                            <span>Node Size</span>
+                            <span class="val" id="node-size-val">2.5px</span>
+                        </div>
+                        <input type="range" id="node-size" min="1" max="8" step="0.5" value="2.5">
+                    </div>
+
+                    <div class="slider-item" id="threshold-container">
+                        <div class="slider-header">
+                            <span>Attention Threshold</span>
+                            <span class="val" id="threshold-val">0.020</span>
+                        </div>
+                        <input type="range" id="threshold-slider" min="0.005" max="0.100" step="0.005" value="0.020">
+                    </div>
+
+                    <div class="slider-item">
+                        <div class="slider-header">
+                            <span>Edge Thickness</span>
+                            <span class="val" id="edge-thickness-val">6.0px</span>
+                        </div>
+                        <input type="range" id="edge-thickness" min="2" max="15" step="0.5" value="6">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Console Log -->
+            <div class="glass-panel">
+                <h2>2. System Log</h2>
+                <div class="console-panel" id="console-log">
+                    <div class="console-line success">[System] Initializing client...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Display Area (Column 2) -->
+        <section class="display-area">
+            <!-- Stage Card -->
+            <div class="glass-panel stage-card">
+                <!-- Source Selector -->
+                <div class="source-switcher">
+                    <button class="source-btn active" id="btn-realtime" onclick="switchSource('realtime')">
+                        📹 Live Webcam Stream
+                    </button>
+                    <button class="source-btn" id="btn-upload" onclick="switchSource('upload')">
+                        🖼️ Static Image Upload
+                    </button>
+                </div>
+
+                <!-- Display Stage with Video, Image & Canvas Overlay -->
+                <div class="display-stage">
+                    <video id="webcam" autoplay playsinline muted></video>
+                    <img id="static-img" class="hidden" alt="Upload Target Container">
+                    <canvas id="overlay" width="640" height="480"></canvas>
+
+                    <!-- Metrics HUD overlay -->
+                    <div class="stage-hud">
+                        <div class="hud-item">
+                            <span class="hud-label">FPS:</span>
+                            <span class="hud-val" id="hud-fps">0</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label">Latency:</span>
+                            <span class="hud-val" id="hud-latency">0 ms</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label">ONNX:</span>
+                            <span class="hud-val" id="hud-onnx" style="color: #10b981;">LOADING</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label">MAR:</span>
+                            <span class="hud-val" id="hud-mar">0.000</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label">Clearance:</span>
+                            <span class="hud-val" id="hud-clearance">0.000</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hidden file upload -->
+                <div class="file-upload-container hidden" id="upload-panel">
+                    <label class="custom-file-btn">
+                        📁 Choose Image File
+                        <input type="file" id="file-picker" style="display: none;" accept="image/*">
+                    </label>
+                    <span id="file-name" style="font-size: 0.85rem; color: var(--text-secondary);">No file chosen</span>
+                </div>
+            </div>
+
+            <!-- Emotion Chart -->
+            <div class="glass-panel chart-card">
+                <div class="emotion-display">
+                    <span class="emotion-display-label">Primary Emotion:</span>
+                    <span class="emotion-display-value" id="top-emotion">INITIALIZING...</span>
+                </div>
+
+                <div class="prob-bar-container" id="chart-mount">
+                    <!-- Loaded dynamically via JavaScript -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const emotionLabels = ["Surprise", "Fear", "Disgust", "Happiness", "Sadness", "Anger", "Neutral"];
+        const emotionColors = ["#3b82f6", "#8b5cf6", "#84cc16", "#eab308", "#6b7280", "#ef4444", "#10b981"];
+        
+        // 88 unique sorted landmark indices matching dataset.py / regions.json
+        const subsetIndices = [
+            0, 1, 2, 4, 5, 6, 7, 13, 14, 17, 33, 37, 39, 40, 61, 63, 66, 70,
+            78, 80, 81, 82, 84, 87, 88, 91, 95, 105, 107, 133, 144, 145, 146,
+            153, 154, 155, 157, 158, 159, 160, 161, 163, 168, 173, 178, 181, 185,
+            191, 246, 249, 263, 267, 269, 270, 291, 293, 296, 300, 308, 310, 311,
+            312, 314, 317, 318, 321, 324, 334, 336, 362, 373, 374, 375, 380, 381,
+            382, 384, 385, 386, 387, 388, 390, 398, 402, 405, 409, 415, 466
+        ];
+
+        // Precomputed static neighbor indices for each of the 88 nodes
+        const NEIGHBORS = [
+            [11, 51, 12, 52], [2, 3, 4, 5], [1, 3, 4, 5], [4, 2, 1, 5], [3, 5, 2, 42], [42, 4, 3, 2], [48, 41, 10, 30], [21, 61, 20, 60], [23, 63, 44, 83], [22, 62, 45, 84], [48, 40, 6, 39], [0, 12, 13, 51], [13, 11, 46, 0], [46, 12, 14, 11], [46, 32, 13, 25], [17, 27, 16, 28], [27, 28, 15, 17], [15, 28, 27, 16], [47, 26, 24, 19], [47, 20, 18, 21], [19, 21, 47, 7], [20, 7, 19, 61], [45, 9, 25, 62], [44, 8, 24, 63], [26, 44, 18, 23], [32, 45, 14, 22], [24, 18, 47, 44], [15, 16, 17, 28], [16, 17, 27, 15], [35, 43, 34, 36], [41, 31, 6, 33], [33, 30, 41, 34], [14, 25, 46, 45], [34, 31, 35, 30], [35, 33, 29, 31], [29, 34, 43, 33], [43, 37, 29, 38], [38, 36, 43, 39], [37, 39, 40, 36], [40, 38, 10, 37], [39, 10, 48, 38], [6, 30, 48, 31], [5, 4, 3, 2], [29, 36, 35, 37], [24, 23, 26, 8], [25, 22, 32, 9], [14, 13, 32, 12], [18, 19, 26, 20], [10, 6, 40, 41], [87, 81, 50, 70], [87, 80, 49, 79], [0, 52, 53, 11], [53, 51, 85, 0], [85, 52, 54, 51], [85, 72, 53, 65], [57, 67, 56, 68], [67, 68, 55, 57], [55, 68, 67, 56], [86, 66, 64, 59], [86, 60, 58, 61], [59, 61, 86, 7], [60, 7, 59, 21], [84, 9, 65, 22], [83, 8, 64, 23], [66, 83, 58, 63], [72, 84, 54, 62], [64, 58, 86, 83], [55, 56, 57, 68], [56, 57, 67, 55], [75, 82, 74, 76], [81, 71, 49, 73], [73, 70, 81, 74], [54, 65, 85, 84], [74, 71, 75, 70], [75, 73, 69, 71], [69, 74, 82, 73], [82, 77, 69, 78], [78, 76, 82, 79], [77, 79, 80, 76], [80, 78, 50, 77], [79, 50, 87, 78], [49, 70, 87, 71], [69, 76, 75, 77], [64, 63, 66, 8], [65, 62, 72, 9], [54, 53, 72, 52], [58, 59, 66, 60], [50, 49, 80, 81]
+        ];
+
+        // Landmark subgroups from regions.json for topological line drawing
+        const landmarkSubsets = {
+            "mouth_lips_outer": [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146],
+            "mouth_lips_inner": [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95],
+            "left_eye_contour": [33, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 246],
+            "right_eye_contour": [263, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 466],
+            "left_eyebrow": [70, 63, 105, 66, 107],
+            "right_eyebrow": [300, 293, 334, 296, 336],
+            "nose_bridge_and_center": [1, 2, 4, 5, 6, 168]
+        };
+
+        let selectedSource = 'realtime';
+        let onnxSession = null;
+        let faceMesh = null;
+        let activeCamera = null;
+        
+        // Metrics tracker
+        let lastFrameTime = performance.now();
+        let fpsHistory = [];
+        window.lastAttentionMatrix = null;
+
+        const video = document.getElementById('webcam');
+        const staticImg = document.getElementById('static-img');
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d');
+        const filePicker = document.getElementById('file-picker');
+        const uploadPanel = document.getElementById('upload-panel');
+        const consoleLog = document.getElementById('console-log');
+
+        // Mount Chart Elements
+        const chartMount = document.getElementById('chart-mount');
+        emotionLabels.forEach((label, idx) => {
+            chartMount.innerHTML += `
+                <div class="prob-row" id="row-${idx}">
+                    <div class="prob-label-row">
+                        <span class="prob-label">${label}</span>
+                        <span class="prob-val" id="pct-${idx}">0%</span>
+                    </div>
+                    <div class="bar-bg">
+                        <div class="bar-fill bar-${idx}" id="bar-${idx}" style="width: 0%;"></div>
+                    </div>
+                </div>
+            `;
+        });
+
+        // Initialize Console Logger
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const line = document.createElement('div');
+            line.className = `console-line ${type}`;
+            line.innerHTML = `[${time}] ${message}`;
+            consoleLog.appendChild(line);
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+        }
+
+        // Global Error Listeners for Client Debugging
+        window.onerror = function(message, source, lineno, colno, error) {
+            log(`Global Error: ${message} (at ${source}:${lineno}:${colno})`, "error");
+            return false;
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+            log(`Unhandled Promise Rejection: ${event.reason}`, "error");
+        });
+
+        // Helper to calculate Euclidean distance between two points in 2D
+        function L2_distance_2d(pt1, pt2) {
+            const dx = pt1.x - pt2.x;
+            const dy = pt1.y - pt2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Initialize Web Application System
+        async function init() {
+            log("Loading ONNX Runtime web runtime binaries...", "info");
+            const hudOnnx = document.getElementById('hud-onnx');
+            try {
+                if (typeof ort === 'undefined') {
+                    throw new Error("ort library is not loaded. CDN script might have failed.");
+                }
+                ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/';
+                
+                // Disable SIMD and Multi-threading for WebAssembly stability
+                ort.env.wasm.simd = false;
+                ort.env.wasm.numThreads = 1;
+                
+                log("Fetching GAT ONNX model file...", "info");
+                const response = await fetch('./gcn_emotion.onnx?cb=' + Date.now(), { cache: "no-store" });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const modelBuffer = await response.arrayBuffer();
+                log(`Model file fetched successfully (${Math.round(modelBuffer.byteLength / 1024)} KB). Initializing session...`, "info");
+                
+                onnxSession = await ort.InferenceSession.create(new Uint8Array(modelBuffer));
+                log("ONNX Web Session successfully initialized.", "success");
+                hudOnnx.innerText = "READY";
+                hudOnnx.style.color = "#10b981";
+            } catch (e) {
+                const errMsg = e && (e.message || String(e)) || "Unknown Error";
+                log("ONNX model load failed: " + errMsg, "error");
+                hudOnnx.innerText = "ERROR";
+                hudOnnx.style.color = "#ef4444";
+                hudOnnx.title = errMsg;
+                
+                const topEmotion = document.getElementById('top-emotion');
+                if (topEmotion) {
+                    topEmotion.innerText = "ONNX ERROR: " + errMsg;
+                    topEmotion.style.color = "#ef4444";
+                }
+            }
+
+            log("Starting MediaPipe FaceMesh model...", "info");
+            faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            faceMesh.onResults(handleFaceMeshResults);
+
+            log("Mounting system webcam frame stream...", "info");
+            activeCamera = new Camera(video, { 
+                onFrame: async () => { 
+                    if (selectedSource === 'realtime') {
+                        await faceMesh.send({ image: video }); 
+                    }
+                }, 
+                width: 640, 
+                height: 480 
+            });
+            activeCamera.start()
+                .then(() => log("Webcam feed active.", "success"))
+                .catch(err => log("Webcam mount failed: " + err.message, "error"));
+
+            setupEventHandlers();
+        }
+
+        // Setup UI Event Handlers
+        function setupEventHandlers() {
+            // Sliders Display Update
+            const nodeSizeSlider = document.getElementById('node-size');
+            nodeSizeSlider.addEventListener('input', (e) => {
+                document.getElementById('node-size-val').innerText = `${e.target.value}px`;
+            });
+
+            const thresholdSlider = document.getElementById('threshold-slider');
+            thresholdSlider.addEventListener('input', (e) => {
+                document.getElementById('threshold-val').innerText = parseFloat(e.target.value).toFixed(3);
+            });
+
+            const thicknessSlider = document.getElementById('edge-thickness');
+            thicknessSlider.addEventListener('input', (e) => {
+                document.getElementById('edge-thickness-val').innerText = `${e.target.value}px`;
+            });
+
+            // File Upload Selector
+            filePicker.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                document.getElementById('file-name').innerText = file.name;
+                log(`Loading image file: ${file.name}`, "info");
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    staticImg.src = event.target.result;
+                    staticImg.onload = async () => { 
+                        log("Evaluating uploaded facial snapshot...", "info");
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        await faceMesh.send({ image: staticImg }); 
+                    };
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Switch Source
+        function switchSource(source) {
+            selectedSource = source;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const btnRealtime = document.getElementById('btn-realtime');
+            const btnUpload = document.getElementById('btn-upload');
+            
+            if (source === 'realtime') {
+                btnRealtime.classList.add('active');
+                btnUpload.classList.remove('active');
+                video.classList.remove('hidden'); 
+                staticImg.classList.add('hidden'); 
+                uploadPanel.classList.add('hidden');
+                log("Switched input source to Live Webcam.", "info");
+            } else {
+                btnUpload.classList.add('active');
+                btnRealtime.classList.remove('active');
+                video.classList.add('hidden'); 
+                staticImg.classList.remove('hidden'); 
+                uploadPanel.classList.remove('hidden');
+                log("Switched input source to Static Image Upload.", "info");
+            }
+        }
+
+        // Process FaceMesh Coordinates
+        async function handleFaceMeshResults(results) {
+            // Track FPS
+            const now = performance.now();
+            const fps = Math.round(1000 / (now - lastFrameTime));
+            lastFrameTime = now;
+            fpsHistory.push(fps);
+            if (fpsHistory.length > 30) fpsHistory.shift();
+            const avgFps = Math.round(fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length);
+            document.getElementById('hud-fps').innerText = avgFps;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+                document.getElementById('top-emotion').innerText = "NO FACE DETECTED";
+                return;
+            }
+
+            const landmarks = results.multiFaceLandmarks[0];
+            const anchor = landmarks[1]; // Nose tip anchor point index 1
+            
+            // Extract the eye corners
+            const leftEyeIdx = subsetIndices[10];
+            const rightEyeIdx = subsetIndices[50];
+            const leftEye = landmarks[leftEyeIdx];
+            const rightEye = landmarks[rightEyeIdx];
+            
+            // Calculate interocular distance in 2D space
+            const dx = leftEye.x - rightEye.x;
+            const dy = leftEye.y - rightEye.y;
+            const interocularDistance = Math.sqrt(dx * dx + dy * dy);
+            
+            // 1. Compute explicit spatial ratios (MAR and Brow-Eye Clearance)
+            const mar_vertical = L2_distance_2d(landmarks[13], landmarks[14]);
+            const mar_horizontal = L2_distance_2d(landmarks[78], landmarks[308]);
+            const mar = mar_vertical / (mar_horizontal + 1e-6);
+            
+            const left_clearance = L2_distance_2d(landmarks[66], landmarks[159]);
+            const right_clearance = L2_distance_2d(landmarks[296], landmarks[386]);
+            const raw_clearance = (left_clearance + right_clearance) / 2.0;
+            const brow_eye_clearance = raw_clearance / (interocularDistance + 1e-6);
+            
+            // Update HUD elements
+            document.getElementById('hud-mar').innerText = mar.toFixed(3);
+            document.getElementById('hud-clearance').innerText = brow_eye_clearance.toFixed(3);
+            
+            // 2. Center-normalize and scale-normalize coordinates of all 88 nodes
+            const normPoints = [];
+            for (let i = 0; i < 88; i++) {
+                const idx = subsetIndices[i];
+                const lm = landmarks[idx];
+                let cx = lm.x - anchor.x;
+                let cy = lm.y - anchor.y;
+                if (interocularDistance > 1e-6) {
+                    cx /= interocularDistance;
+                    cy /= interocularDistance;
+                }
+                normPoints.push({ x: cx, y: cy });
+            }
+            
+            // 3. Compute 6D features: (x, y, dist1, dist2, dist3, dist4)
+            const flatFeatures6D = [];
+            for (let i = 0; i < 88; i++) {
+                const pt = normPoints[i];
+                flatFeatures6D.push(pt.x, pt.y);
+                
+                const nbrs = NEIGHBORS[i];
+                for (let k = 0; k < 4; k++) {
+                    const nbrPt = normPoints[nbrs[k]];
+                    const d_x = pt.x - nbrPt.x;
+                    const d_y = pt.y - nbrPt.y;
+                    const dist = Math.sqrt(d_x * d_x + d_y * d_y);
+                    flatFeatures6D.push(dist);
+                }
+            }
+            
+            // 4. Compute pixel coordinates for rendering (using all 88 landmarks for full visualization)
+            const pixelCoords = [];
+            subsetIndices.forEach(idx => {
+                const lm = landmarks[idx];
+                const renderX = (selectedSource === 'realtime') ? (1.0 - lm.x) * canvas.width : lm.x * canvas.width;
+                pixelCoords.push({ x: renderX, y: lm.y * canvas.height });
+            });
+
+            // Crop face and prepare image tensor
+            let imgTensor = null;
+            if (results.image && landmarks.length > 0) {
+                try {
+                    let minX = 1.0, maxX = 0.0, minY = 1.0, maxY = 0.0;
+                    landmarks.forEach(lm => {
+                        if (lm.x < minX) minX = lm.x;
+                        if (lm.x > maxX) maxX = lm.x;
+                        if (lm.y < minY) minY = lm.y;
+                        if (lm.y > maxY) maxY = lm.y;
+                    });
+                    
+                    const width = maxX - minX;
+                    const height = maxY - minY;
+                    const paddingX = width * 0.2;
+                    const paddingY = height * 0.2;
+                    
+                    const cropMinX = Math.max(0, minX - paddingX);
+                    const cropMaxX = Math.min(1, maxX + paddingX);
+                    const cropMinY = Math.max(0, minY - paddingY);
+                    const cropMaxY = Math.min(1, maxY + paddingY);
+                    
+                    const imgWidth = results.image.width;
+                    const imgHeight = results.image.height;
+                    
+                    const startX = cropMinX * imgWidth;
+                    const startY = cropMinY * imgHeight;
+                    const cropW = (cropMaxX - cropMinX) * imgWidth;
+                    const cropH = (cropMaxY - cropMinY) * imgHeight;
+                    
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = 224;
+                    tempCanvas.height = 224;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.drawImage(results.image, startX, startY, cropW, cropH, 0, 0, 224, 224);
+                    
+                    const floatData = preprocessImageCanvas(tempCanvas);
+                    imgTensor = new ort.Tensor('float32', floatData, [1, 3, 224, 224]);
+                } catch (e) {
+                    console.error("Failed to crop/preprocess face image:", e);
+                }
+            }
+            
+            if (!imgTensor) {
+                imgTensor = new ort.Tensor('float32', new Float32Array(3 * 224 * 224), [1, 3, 224, 224]);
+            }
+
+            // Trigger local edge ONNX inference
+            const start = performance.now();
+            if (onnxSession) {
+                await runEdgeInference(flatFeatures6D, imgTensor);
+            }
+            const end = performance.now();
+            document.getElementById('hud-latency').innerText = `${Math.round(end - start)} ms`;
+            drawGraphLayout(pixelCoords, window.lastAttentionMatrix);
+        }
+
+        // ImageNet normalization for local inference
+        function preprocessImageCanvas(canvas224) {
+            const ctx224 = canvas224.getContext('2d');
+            const imgData = ctx224.getImageData(0, 0, 224, 224);
+            const data = imgData.data; // RGBA array of size 224 * 224 * 4
+            
+            const floatData = new Float32Array(3 * 224 * 224);
+            const mean = [0.485, 0.456, 0.406];
+            const std = [0.229, 0.224, 0.225];
+            
+            for (let i = 0; i < 224 * 224; i++) {
+                const r = data[i * 4] / 255.0;
+                const g = data[i * 4 + 1] / 255.0;
+                const b = data[i * 4 + 2] / 255.0;
+                
+                // NCHW format
+                floatData[i] = (r - mean[0]) / std[0];
+                floatData[224 * 224 + i] = (g - mean[1]) / std[1];
+                floatData[2 * 224 * 224 + i] = (b - mean[2]) / std[2];
+            }
+            
+            return floatData;
+        }
+
+        // Run Edge Inference on Local WebAssembly Session
+        async function runEdgeInference(flatFeatures6D, imgTensor) {
+            try {
+                // The ONNX model expects input_coords [1, 88, 6] and input_img [1, 3, 224, 224]
+                const coordsTensor = new ort.Tensor('float32', new Float32Array(flatFeatures6D), [1, 88, 6]);
+                
+                const outputMap = await onnxSession.run({ 
+                    input_coords: coordsTensor,
+                    input_img: imgTensor
+                });
+                const logits = Array.from(outputMap.emotion_probabilities.data);
+                
+                // Extract 88x88 GAT attention weights from ONNX output tensor
+                if (outputMap.attention_matrix) {
+                    const attnData = outputMap.attention_matrix.data;
+                    const attnMatrix = [];
+                    for (let i = 0; i < 88; i++) {
+                        attnMatrix.push(Array.from(attnData.subarray(i * 88, (i + 1) * 88)));
+                    }
+                    window.lastAttentionMatrix = attnMatrix;
+                }
+                
+                // Apply manual Softmax activation
+                const exponents = logits.map(Math.exp);
+                const sumExponents = exponents.reduce((a, b) => a + b, 0);
+                const probabilities = exponents.map(v => v / sumExponents);
+                
+                updateProbabilityMetrics(probabilities);
+            } catch (err) {
+                log("Local edge inference error: " + err.message, "error");
+            }
+        }
+
+        // Render probability distributions
+        function updateProbabilityMetrics(probs) {
+            let maxIdx = 0;
+            let maxVal = 0;
+            
+            probs.forEach((val, idx) => {
+                const pct = Math.round(val * 100);
+                document.getElementById(`pct-${idx}`).innerText = `${pct}%`;
+                document.getElementById(`bar-${idx}`).style.width = `${pct}%`;
+                
+                if (val > maxVal) {
+                    maxVal = val;
+                    maxIdx = idx;
+                }
+            });
+
+            // Update top prediction
+            document.getElementById('top-emotion').innerText = `${emotionLabels[maxIdx]} (${Math.round(maxVal * 100)}%)`;
+        }
+
+        // Render visual nodes and connections
+        function drawGraphLayout(points, attentionMatrix) {
+            if (!points || points.length === 0) return;
+            
+            const hasAttention = !!attentionMatrix;
+            
+            // 1. Draw Baseline Topological Connections (Green edges) for GAT Subsets
+            ctx.shadowBlur = 0; // reset glow
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.22)';
+            ctx.lineWidth = 1.2;
+            
+            for (const [name, indices] of Object.entries(landmarkSubsets)) {
+                // Connect sequential elements
+                for (let i = 0; i < indices.length - 1; i++) {
+                    const idx1 = subsetIndices.indexOf(indices[i]);
+                    const idx2 = subsetIndices.indexOf(indices[i+1]);
+                    if (idx1 !== -1 && idx2 !== -1) {
+                        ctx.beginPath();
+                        ctx.moveTo(points[idx1].x, points[idx1].y);
+                        ctx.lineTo(points[idx2].x, points[idx2].y);
+                        ctx.stroke();
+                    }
+                }
+                // Connect last to first for loops (lips and eyes)
+                if (name.includes('lips') || name.includes('eye')) {
+                    const idx_first = subsetIndices.indexOf(indices[0]);
+                    const idx_last = subsetIndices.indexOf(indices[indices.length - 1]);
+                    if (idx_first !== -1 && idx_last !== -1) {
+                        ctx.beginPath();
+                        ctx.moveTo(points[idx_first].x, points[idx_first].y);
+                        ctx.lineTo(points[idx_last].x, points[idx_last].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            
+            // 2. Draw Glowing GAT Attention connections on top if attention matrix is present
+            if (hasAttention) {
+                const threshold = parseFloat(document.getElementById('threshold-slider').value);
+                const thickness = parseFloat(document.getElementById('edge-thickness').value);
+                const numNodesWithAttention = Math.min(88, attentionMatrix.length);
+                
+                for (let i = 0; i < numNodesWithAttention; i++) {
+                    if (!attentionMatrix[i]) continue;
+                    
+                    // Find top-2 attention connections for node i to keep graph clean
+                    const targets = attentionMatrix[i]
+                        .map((weight, idx) => ({ weight, idx }))
+                        .filter(t => t.idx !== i && t.idx < points.length); // exclude self and out-of-bounds
+                    
+                    targets.sort((a, b) => b.weight - a.weight);
+                    
+                    const limit = Math.min(2, targets.length);
+                    for (let k = 0; k < limit; k++) {
+                        const { weight, idx } = targets[k];
+                        if (weight > threshold) {
+                            ctx.strokeStyle = `rgba(244, 63, 94, ${Math.min(weight * 8, 1.0)})`;
+                            ctx.lineWidth = weight * thickness;
+                            ctx.shadowColor = 'rgba(244, 63, 94, 0.7)';
+                            ctx.shadowBlur = weight * 10;
+                            ctx.beginPath(); 
+                            ctx.moveTo(points[i].x, points[i].y); 
+                            ctx.lineTo(points[idx].x, points[idx].y); 
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+            
+            // 3. Draw Nodes (Green for baseline, or pink for active GAT nodes)
+            ctx.shadowBlur = 0; // reset
+            const showNodes = document.getElementById('toggle-nodes').checked;
+            
+            if (showNodes) {
+                const nodeSize = parseFloat(document.getElementById('node-size').value);
+                
+                for (let i = 0; i < points.length; i++) {
+                    ctx.beginPath(); 
+                    ctx.arc(points[i].x, points[i].y, nodeSize, 0, 2 * Math.PI); 
+                    if (hasAttention && i < 88) {
+                        ctx.fillStyle = '#f43f5e';
+                    } else {
+                        ctx.fillStyle = '#10b981';
+                    }
+                    ctx.fill();
+                }
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

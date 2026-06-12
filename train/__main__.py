@@ -11,6 +11,7 @@ from .model import DeepFacialGAT
 from .dataset import FacialLandmarkDataset
 from .utils import FocalLoss
 from sklearn.metrics import f1_score
+import onnx
 
 def set_seed(seed):
     random.seed(seed)
@@ -28,12 +29,28 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
     correct = 0
     total = 0
     
-    for coords, labels in loader:
-        coords, labels = coords.to(device), labels.to(device)
+    for coords, imgs, labels in loader:
+        coords, imgs, labels = coords.to(device), imgs.to(device), labels.to(device)
         
         optimizer.zero_grad()
-        outputs = model(coords)
-        loss = criterion(outputs, labels)
+        
+        # Vector Mixup augmentation
+        alpha = 0.2
+        if alpha > 0:
+            lam = np.random.beta(alpha, alpha)
+        else:
+            lam = 1.0
+            
+        batch_size = coords.size(0)
+        index = torch.randperm(batch_size, device=device)
+        
+        mixed_coords = lam * coords + (1 - lam) * coords[index]
+        mixed_imgs = lam * imgs + (1 - lam) * imgs[index]
+        labels_a, labels_b = labels, labels[index]
+        
+        outputs, _ = model(mixed_coords, mixed_imgs)
+        loss = lam * criterion(outputs, labels_a) + (1 - lam) * criterion(outputs, labels_b)
+        
         loss.backward()
         # Gradient clipping to prevent exploding parameters in deep GAT layers
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -42,7 +59,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         running_loss += loss.item() * coords.size(0)
         _, predicted = outputs.max(1)
         total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()
+        correct += predicted.eq(labels_a).sum().item()
         
     epoch_loss = running_loss / total
     epoch_acc = correct / total
@@ -57,9 +74,9 @@ def evaluate(model, loader, criterion, device):
     all_preds = []
     
     with torch.no_grad():
-        for coords, labels in loader:
-            coords, labels = coords.to(device), labels.to(device)
-            outputs = model(coords)
+        for coords, imgs, labels in loader:
+            coords, imgs, labels = coords.to(device), imgs.to(device), labels.to(device)
+            outputs, _ = model(coords, imgs)
             loss = criterion(outputs, labels)
             
             running_loss += loss.item() * coords.size(0)
@@ -84,7 +101,7 @@ def evaluate(model, loader, criterion, device):
 def main():
     parser = argparse.ArgumentParser(description="Facial Emotion Recognition GAT Training Loop")
     parser.add_argument("--epochs", type=int, default=350, help="Number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=256, help="Batch size for training")
+    parser.add_argument("--batch-size", type=int, default=128, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--hidden-dim", type=int, default=256, help="Hidden dimensions of GAT layers")
     parser.add_argument("--depth", type=int, default=4, help="Number of stacked GAT layers")
@@ -112,8 +129,8 @@ def main():
         return
         
     print("Loading datasets...")
-    train_dataset = FacialLandmarkDataset(train_path, args.regions_json)
-    test_dataset = FacialLandmarkDataset(test_path, args.regions_json)
+    train_dataset = FacialLandmarkDataset(train_path, args.regions_json, is_train=True)
+    test_dataset = FacialLandmarkDataset(test_path, args.regions_json, is_train=False)
     
     train_loader = DataLoader(
         train_dataset, 
@@ -144,11 +161,20 @@ def main():
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total model parameters: {num_params:,}")
     
-    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # Identify parameter groups for split learning rates
+    mobilenet_params = list(model.texture_net.parameters())
+    mobilenet_param_ids = set(id(p) for p in mobilenet_params)
+    other_params = [p for p in model.parameters() if id(p) not in mobilenet_param_ids]
+    
+    optimizer = optim.AdamW([
+        {'params': mobilenet_params, 'lr': args.lr * 0.1}, # 1e-4 if args.lr is 1e-3
+        {'params': other_params, 'lr': args.lr}            # 1e-3
+    ], weight_decay=args.weight_decay)
+    
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, 
-        T_0=50, 
-        T_mult=2, 
+        T_0=120, 
+        T_mult=1, 
         eta_min=1e-6
     )
     
@@ -170,7 +196,7 @@ def main():
         for name, w in zip(emotions, class_weights):
             print(f"  {name:<12}: {w.item():.4f}")
             
-        criterion = FocalLoss(alpha=class_weights, gamma=2.0)
+        criterion = FocalLoss(alpha=class_weights, gamma=2.2)
     else:
         print("Using standard CrossEntropyLoss...")
         criterion = nn.CrossEntropyLoss()
@@ -218,25 +244,34 @@ def main():
     if args.export_onnx:
         print(f"\nExporting GAT model to ONNX format: {args.export_onnx}")
         model.eval()
-        # Create a dummy input (batch_size=1, num_subset_nodes, 2)
-        dummy_input = torch.zeros((1, len(subset_indices), 2), device=device)
+        # Create dummy inputs: coords (shape [1, len(subset_indices), 6]) and img (shape [1, 3, 224, 224])
+        dummy_coords = torch.zeros((1, len(subset_indices), 6), device=device)
+        dummy_img = torch.zeros((1, 3, 224, 224), device=device)
         
         try:
             torch.onnx.export(
                 model,
-                dummy_input,
+                (dummy_coords, dummy_img),
                 args.export_onnx,
                 export_params=True,
-                opset_version=16, # Target higher opset for secure dynamic masking compilation
+                opset_version=18, # Use modern opset 18
                 do_constant_folding=True,
-                input_names=['input_coords'],
-                output_names=['emotion_probabilities'],
+                input_names=['input_coords', 'input_img'],
+                output_names=['emotion_probabilities', 'attention_matrix'],
+                dynamo=False, # Force legacy TorchScript exporter for maximum WebAssembly compatibility
                 dynamic_axes={
                     'input_coords': {0: 'batch_size'},
-                    'emotion_probabilities': {0: 'batch_size'}
+                    'input_img': {0: 'batch_size'},
+                    'emotion_probabilities': {0: 'batch_size'},
+                    'attention_matrix': {0: 'batch_size'}
                 }
             )
-            print(f"Model successfully exported to ONNX: {os.path.abspath(args.export_onnx)}")
+            
+            # Load and save with ONNX library to merge external data
+            onnx_model = onnx.load(args.export_onnx)
+            onnx.save(onnx_model, args.export_onnx)
+            
+            print(f"Model successfully exported to self-contained ONNX: {os.path.abspath(args.export_onnx)}")
         except Exception as e:
             print(f"[Warning] ONNX export failed: {e}")
 

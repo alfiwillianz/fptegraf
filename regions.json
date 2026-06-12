@@ -1,6 +1,6 @@
 {
   "project": "Real-time Emotion Recognition GCN",
-  "total_selected_nodes": 68,
+  "total_selected_nodes": 88,
   "normalization_anchor_index": 1,
   "description": "Subsampled structural layout from MediaPipe 468/478 Face Mesh topology optimizing for highly expressive mobile-first inference environments.",
   "landmark_subsets": {
