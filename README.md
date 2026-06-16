@@ -255,9 +255,3 @@ Save this code block as `template.typ`. This defines the entire document logic, 
 ```
 
 ---
-
-## 2. The Main Document Content (`main.typ`)
-
-Save this code block as `main.typ` in the same directory. It imports your template and structural layout exactly matching Chapters I through V plus appendices.
-
-```typst
